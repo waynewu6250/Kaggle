@@ -3,6 +3,7 @@ from torch.optim import Adam
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import os
+from tqdm import tqdm
 
 #Our Defined modules
 from config import opt
@@ -14,11 +15,10 @@ def train(**kwargs):
 
     #1. Load parameter and vis
     opt.parse(kwargs)
-    vis = Visualizer(opt.env)
 
     #2. Load data
     train_data = DogCat(opt.train_data_root, train = True)
-    val_data = DogCat(opt.test_data_root, train=False)
+    val_data = DogCat(opt.train_data_root, train=False)
     train_dataloader = DataLoader(train_data, opt.batch_size, shuffle=True)
     val_dataloader = DataLoader(val_data, opt.batch_size, shuffle=False)
 
@@ -42,7 +42,7 @@ def train(**kwargs):
         ##                         train                           ##
         ##=========================================================##
         running_loss = []
-        for i, (x_batch, y_batch) in enumerate(train_dataloader):
+        for i, (x_batch, y_batch) in tqdm(enumerate(train_dataloader)):
             data = Variable(x_batch)
             label = Variable(y_batch)
             
@@ -92,4 +92,43 @@ def train(**kwargs):
             for param in optimizer.param_groups:
                 param["lr"] = lr
 
+
+def test(**kwargs):
+
+    #1. Load parameter
+    opt.parse(kwargs)
+
+    #2. Load data
+    test_data = DogCat(opt.test_data_root,test=True)
+    test_dataloader = DataLoader(test_data, batch_size=opt.batch_size, shuffle=False)
+
+    #3. Load model
+    model = getattr(models, opt.model)().eval()
+    if opt.load_model_path:
+        model.load(opt.load_model_path)
+    
+    results = []
+
+    for data,path in test_dataloader:
+        
+        score = model(data)
+        probability = t.nn.functional.softmax(score,dim=1)[:,0].detach().tolist()
+        
+        batch_results = [(path_.item(),probability_) for path_,probability_ in zip(path,probability) ]
+
+        results += batch_results
+    write_csv(results,opt.result_file)
+
+    return results
+
+def write_csv(results,file_name):
+    import csv
+    with open(file_name,'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(['id','label'])
+        writer.writerows(results)
+
+if __name__=='__main__':
+    import fire
+    fire.Fire()
 
